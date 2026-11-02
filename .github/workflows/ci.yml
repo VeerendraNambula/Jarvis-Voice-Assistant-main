@@ -23,4 +23,4 @@ jobs:
       - name: Compile and test
         run: |
           python -m compileall -q main.py musiclibrary.py tests
-          pytest -q
+          python -m pytest -q
