@@ -1,5 +1,5 @@
 import os
-import sys
+from pathlib import Path
 import webbrowser
 
 import pyttsx3
@@ -10,20 +10,28 @@ from openai import OpenAI, OpenAIError
 
 import musiclibrary
 
-load_dotenv()
+load_dotenv(Path(__file__).resolve().parent / ".env")
 
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
 NEWS_API_KEY = os.getenv("NEWS_API_KEY")
+NEWS_COUNTRY = os.getenv("NEWS_COUNTRY", "in")
 
 ai_client = OpenAI(api_key=OPENAI_API_KEY) if OPENAI_API_KEY else None
 recognizer = sr.Recognizer()
-speech_engine = pyttsx3.init()
+speech_engine = None
 
 
 def speak(text: str) -> None:
-    speech_engine.say(text)
-    speech_engine.runAndWait()
+    global speech_engine
+    print(text)
+    try:
+        if speech_engine is None:
+            speech_engine = pyttsx3.init()
+        speech_engine.say(text)
+        speech_engine.runAndWait()
+    except Exception as error:
+        print(f"Text-to-speech unavailable: {error}")
 
 
 def ai_process(command: str) -> str:
@@ -51,6 +59,9 @@ def ai_process(command: str) -> str:
 
 def process_command(command: str) -> None:
     normalized = command.lower().strip()
+    if not normalized:
+        speak("Please say a command.")
+        return
     print(f"Received command: {command}")
 
     if "open google" in normalized:
@@ -77,7 +88,7 @@ def process_command(command: str) -> None:
         try:
             response = requests.get(
                 "https://newsapi.org/v2/top-headlines",
-                params={"country": "us", "apiKey": NEWS_API_KEY},
+                params={"country": NEWS_COUNTRY, "apiKey": NEWS_API_KEY},
                 timeout=10,
             )
             response.raise_for_status()
@@ -127,6 +138,9 @@ def main() -> None:
             print(f"Speech recognition request failed: {error}")
         except sr.WaitTimeoutError:
             print("No speech detected before timeout.")
+        except (OSError, AttributeError) as error:
+            print(f"Microphone/audio input is unavailable: {error}")
+            break
         except SystemExit:
             break
         except Exception as error:
