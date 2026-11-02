@@ -1,125 +1,137 @@
-import speech_recognition as sr
-import webbrowser
-import pyttsx3
-import musiclibrary
-import requests
-import sys
-import openai
-from dotenv import load_dotenv
 import os
+import sys
+import webbrowser
 
-# Load environment variables from .env file
-load_dotenv(r"C:\Users\BQ562TS\Desktop\Jarvis-Voice-Assistant-main\.env")  # Use relative path
-openai.api_key = os.getenv("OPENAI_API_KEY")  # Ensure the .env has the key correctly set
-newsapi = os.getenv("NEWS_API_KEY")  # Load the News API key
+import pyttsx3
+import requests
+import speech_recognition as sr
+from dotenv import load_dotenv
+from openai import OpenAI, OpenAIError
 
+import musiclibrary
+
+load_dotenv()
+
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
+NEWS_API_KEY = os.getenv("NEWS_API_KEY")
+
+ai_client = OpenAI(api_key=OPENAI_API_KEY) if OPENAI_API_KEY else None
 recognizer = sr.Recognizer()
-engine = pyttsx3.init()
+speech_engine = pyttsx3.init()
 
-def speak(text):
-    engine.say(text)
-    engine.runAndWait()
 
-def aiprocess(command):
+def speak(text: str) -> None:
+    speech_engine.say(text)
+    speech_engine.runAndWait()
+
+
+def ai_process(command: str) -> str:
+    if ai_client is None:
+        return "AI responses are unavailable. Add your OpenAI API key to the local environment file."
+
     try:
-        response = openai.Completion.create(
-            model="gpt-3.5-turbo",
-            prompt=f"You are a helpful virtual assistant. The user asked: {command}",
+        response = ai_client.chat.completions.create(
+            model=OPENAI_MODEL,
+            messages=[
+                {
+                    "role": "system",
+                    "content": "You are a concise, helpful desktop voice assistant.",
+                },
+                {"role": "user", "content": command},
+            ],
             temperature=0.7,
-            max_tokens=150
+            max_tokens=150,
         )
-        return response.choices[0].text.strip()
-    except openai.error.OpenAIError as e:
-        print(f"OpenAI API Error: {e}")
-        speak("Sorry, there was an issue processing your request.")
-    except Exception as e:
-        print(f"Error: {e}")
-        speak("Sorry, I couldn't process your request.")
+        return response.choices[0].message.content or "I couldn't generate a response."
+    except OpenAIError as error:
+        print(f"OpenAI API error: {error}")
+        return "Sorry, there was an issue processing your request."
 
-def processcommand(c):
-    print(f"Received command: {c}")  # Debugging line
 
-    if "open google" in c.lower():
-        try:
-            webbrowser.open("https://www.google.co.in/")
-        except Exception as e:
-            print(f"Error opening Google: {e}")
-            speak("Sorry, I couldn't open Google.")
-    elif "open facebook" in c.lower():
-        try:
-            webbrowser.open("https://www.facebook.com/")
-        except Exception as e:
-            print(f"Error opening Facebook: {e}")
-            speak("Sorry, I couldn't open Facebook.")
-    elif "open twitter" in c.lower():
-        try:
-            webbrowser.open("https://x.com/home")
-        except Exception as e:
-            print(f"Error opening Twitter: {e}")
-            speak("Sorry, I couldn't open Twitter.")
-    elif "open youtube" in c.lower():
-        try:
-            webbrowser.open("https://www.youtube.com/")
-        except Exception as e:
-            print(f"Error opening YouTube: {e}")
-            speak("Sorry, I couldn't open YouTube.")
-    elif c.lower().startswith("play"):
-        song = c.lower().split(" ")[1]
+def process_command(command: str) -> None:
+    normalized = command.lower().strip()
+    print(f"Received command: {command}")
+
+    if "open google" in normalized:
+        webbrowser.open("https://www.google.com/")
+    elif "open facebook" in normalized:
+        webbrowser.open("https://www.facebook.com/")
+    elif "open twitter" in normalized or "open x" in normalized:
+        webbrowser.open("https://x.com/home")
+    elif "open youtube" in normalized:
+        webbrowser.open("https://www.youtube.com/")
+    elif normalized.startswith("play"):
+        parts = normalized.split(maxsplit=1)
+        song = parts[1] if len(parts) > 1 else ""
         link = musiclibrary.music.get(song)
         if link:
-            try:
-                webbrowser.open(link)
-            except Exception as e:
-                print(f"Error playing song {song}: {e}")
-                speak(f"Sorry, I couldn't play {song}.")
+            webbrowser.open(link)
         else:
-            speak(f"Sorry, I couldn't find the song {song}.")
-    elif "news" in c.lower():
-        try:
-            r = requests.get(f"https://newsapi.org/v2/top-headlines?country=us&apiKey={newsapi}")
-            if r.status_code == 200:
-                data = r.json()
-                articles = data.get('articles', [])
-                for article in articles:
-                    speak(article['title'])
-        except Exception as e:
-            print(f"Error fetching news: {e}")
-            speak("Sorry, I couldn't fetch the news.")
-    elif "exit" in c.lower():
-        speak("Shutting down. Goodbye!")
-        sys.exit()
-    else:
-        output = aiprocess(c)
-        speak(output)
+            speak("Please specify a song from your music library.")
+    elif "news" in normalized:
+        if not NEWS_API_KEY:
+            speak("News is unavailable. Add a News API key to your local environment file.")
+            return
 
-if __name__ == "__main__":
-    speak("Initializing Jarvis...")
+        try:
+            response = requests.get(
+                "https://newsapi.org/v2/top-headlines",
+                params={"country": "us", "apiKey": NEWS_API_KEY},
+                timeout=10,
+            )
+            response.raise_for_status()
+            articles = response.json().get("articles", [])
+            if not articles:
+                speak("There are no headlines available right now.")
+                return
+            for article in articles[:5]:
+                title = article.get("title")
+                if title:
+                    speak(title)
+        except requests.RequestException as error:
+            print(f"News API error: {error}")
+            speak("Sorry, I couldn't fetch the news.")
+    elif "exit" in normalized or "quit" in normalized:
+        speak("Shutting down. Goodbye!")
+        raise SystemExit(0)
+    else:
+        speak(ai_process(command))
+
+
+def main() -> None:
+    speak("Initializing Jarvis.")
 
     while True:
-        r = recognizer
         print("Listening for wake word...")
-
         try:
             with sr.Microphone() as source:
-                print("Listening...")
-                # Adjust for ambient noise for a shorter duration or skip adjustment
-                r.adjust_for_ambient_noise(source, duration=0.1)  # Shortened duration for quicker response
-                audio = r.listen(source, timeout=5, phrase_time_limit=5)  # Shortened timeout
-            word = r.recognize_google(audio)
-            print(f"Recognized: {word}")
+                recognizer.adjust_for_ambient_noise(source, duration=0.3)
+                audio = recognizer.listen(source, timeout=5, phrase_time_limit=5)
 
-            if "jarvis" in word.lower():
-                speak("Yes, how can I assist you?")
-                with sr.Microphone() as source:
-                    print("Listening for command...")
-                    audio = r.listen(source, timeout=5, phrase_time_limit=5)  # Shortened timeout
-                    command = r.recognize_google(audio)
-                    print(f"Command: {command}")
-                    processcommand(command)
+            phrase = recognizer.recognize_google(audio)
+            print(f"Recognized: {phrase}")
+
+            if "jarvis" not in phrase.lower():
+                continue
+
+            speak("Yes, how can I assist you?")
+            with sr.Microphone() as source:
+                audio = recognizer.listen(source, timeout=5, phrase_time_limit=8)
+            command = recognizer.recognize_google(audio)
+            process_command(command)
 
         except sr.UnknownValueError:
             print("Sorry, I couldn't understand the audio.")
-        except sr.RequestError as e:
-            print(f"Could not request results from Google Speech Recognition service; {e}")
-        except Exception as e:
-            print(f"Error: {e}")
+        except sr.RequestError as error:
+            print(f"Speech recognition request failed: {error}")
+        except sr.WaitTimeoutError:
+            print("No speech detected before timeout.")
+        except SystemExit:
+            break
+        except Exception as error:
+            print(f"Unexpected error: {error}")
+
+
+if __name__ == "__main__":
+    main()
