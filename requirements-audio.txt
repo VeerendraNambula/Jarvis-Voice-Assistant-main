@@ -1,0 +1,2 @@
+# Install only when using a physical microphone.
+PyAudio>=0.2.14
