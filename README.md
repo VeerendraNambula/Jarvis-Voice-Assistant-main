@@ -7,7 +7,7 @@ A Python desktop voice assistant that listens for the wake word **“Jarvis”**
 - Speech input with SpeechRecognition and Google Speech Recognition.
 - Text-to-speech responses with pyttsx3.
 - Website shortcuts for Google, Facebook, X, and YouTube.
-- News headlines through NewsAPI.
+- News headlines through NewsAPI (India by default; set `NEWS_COUNTRY` to change it).
 - Optional AI responses through the OpenAI Chat Completions API.
 - A small editable music-link dictionary in `musiclibrary.py`.
 
@@ -38,6 +38,17 @@ Install dependencies:
 pip install -r requirements.txt
 ```
 
+For microphone input, install the optional audio dependency:
+
+```bash
+pip install -r requirements-audio.txt
+```
+
+On Linux, PyAudio may require PortAudio development headers (Debian/Ubuntu: `sudo apt install portaudio19-dev`). On Windows, a compatible PyAudio wheel may be needed. Grant microphone access to your terminal or Python environment.
+
+```
+```
+
 On Windows, installing PyAudio may require a compatible wheel or audio build tools. Microphone access must also be enabled for your terminal or Python environment.
 
 Copy `.env.example` to `.env` and add your own API keys:
@@ -46,6 +57,7 @@ Copy `.env.example` to `.env` and add your own API keys:
 OPENAI_API_KEY=your_openai_api_key
 OPENAI_MODEL=gpt-4o-mini
 NEWS_API_KEY=your_news_api_key
+NEWS_COUNTRY=in
 ```
 
 Keep `.env` private. Never commit API keys.
